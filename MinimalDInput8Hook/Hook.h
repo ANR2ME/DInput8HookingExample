@@ -71,7 +71,7 @@ struct CUSTOM_PEB
 
 extern PROCESS_BASIC_INFORMATION BasicProcessInfo;
 
-void InitializeHooking();
+int InitializeHooking();
 
 void* HookFunction_Internal(const char* DLLName, const char* FunctionName, void* NewAddress);
 

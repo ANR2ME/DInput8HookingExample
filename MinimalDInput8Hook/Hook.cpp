@@ -1,15 +1,43 @@
 #include "stdafx.h"
 #include "Hook.h"
+#include <winternl.h>
 
+typedef NTSTATUS(NTAPI* TFNNtQueryInformationProcess)(
+	IN HANDLE ProcessHandle,
+	IN PROCESSINFOCLASS ProcessInformationClass,
+	OUT PVOID ProcessInformation,
+	IN ULONG ProcessInformationLength,
+	OUT PULONG ReturnLength OPTIONAL
+	);
+TFNNtQueryInformationProcess pfnNtQueryInformationProcess = nullptr;
 PROCESS_BASIC_INFORMATION BasicProcessInfo;
 
-void InitializeHooking()
+int InitInternals() {
+	pfnNtQueryInformationProcess = (TFNNtQueryInformationProcess)GetProcAddress(GetModuleHandle(TEXT("Ntdll.dll")), "NtQueryInformationProcess");
+	if (!pfnNtQueryInformationProcess) {
+		// Experimental only, should probably print this on the debug output and fallback to another version of NtQueryInformationProcess (if any)
+		MessageBox(GetConsoleWindow(), TEXT("Failed to get NtQueryInformationProcess"), TEXT("Error"), MB_OK);
+		return -1;
+	}
+
+	return 0;
+}
+
+int InitializeHooking()
 {
+	if (InitInternals() < 0) {
+		return -1;
+	}
+
 	// Get our Process Handle
 	const HANDLE Process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, GetCurrentProcessId());
 
 	// Find out our base address, where the Executable image is loaded in memory
-	NtQueryInformationProcess(Process, ProcessBasicInformation, &BasicProcessInfo, sizeof(BasicProcessInfo), nullptr);
+	//NtQueryInformationProcess(Process, ProcessBasicInformation, &BasicProcessInfo, sizeof(BasicProcessInfo), nullptr);
+	// Use dynamically linked internal APIs as it's subject to change from one release of Windows to the next.
+	pfnNtQueryInformationProcess(Process, ProcessBasicInformation, &BasicProcessInfo, sizeof(BasicProcessInfo), nullptr);
+
+	return 0;
 }
 
 void* HookFunction_Internal(const char* DLLName, const char* FunctionName, void* NewAddress)
