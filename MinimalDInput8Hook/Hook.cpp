@@ -57,11 +57,21 @@ void* HookFunction_Internal(const char* DLLName, const char* FunctionName, void*
 	const int NumImportDesciptors = ImportDirectory.Size / sizeof(IMAGE_IMPORT_DESCRIPTOR);
 	PIMAGE_IMPORT_DESCRIPTOR Descriptors = (PIMAGE_IMPORT_DESCRIPTOR)(BaseAddress + ImportDirectory.VirtualAddress);
 
+	//WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), DLLName, (DWORD)strlen(DLLName), nullptr, nullptr);
+	//WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), "\n", 1, nullptr, nullptr);
+
 	// Go through all imported DLLs and find the one we are insteresed in
 	for (int ImportDLLIndex = 0; ImportDLLIndex < NumImportDesciptors; ++ImportDLLIndex)
 	{
 		PIMAGE_IMPORT_DESCRIPTOR Descriptor = Descriptors + ImportDLLIndex;
 		const char* ImportDLLName = (const char*)BaseAddress + Descriptor->Name;
+		// On a packed/protected program, some of the descriptors might contains an invalid data (feels like exceeding the actual number of import descriptors), zero-filled Descriptor seems to be used as terminator.
+		unsigned char* mm = (unsigned char*)Descriptor;
+		if ((*mm == 0) && memcmp(mm, mm + 1, sizeof(IMAGE_IMPORT_DESCRIPTOR) - 1) == 0) 
+			break;
+
+		//WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), ImportDLLName, (DWORD)strlen(ImportDLLName), nullptr, nullptr);
+		//WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), "\n", 1, nullptr, nullptr);
 
 		// Check if we found our DLL in the import table
 		if (!strcmp(ImportDLLName, DLLName))
