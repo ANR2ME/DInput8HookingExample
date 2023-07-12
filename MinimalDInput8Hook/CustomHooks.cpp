@@ -74,9 +74,6 @@ HANDLE WINAPI CreateFileW_Wrapper(
 
 void SetupHooks()
 {
-	// Create a console for Debug output
-	AllocConsole();
-
 	// Setup hooks here, see examples below
 	
 	OriginalCreateFileA = HookFunction("KERNEL32.dll", "CreateFileA", &CreateFileA_Wrapper);

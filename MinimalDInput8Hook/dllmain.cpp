@@ -6,6 +6,9 @@
 
 void Init()
 {
+	// Create a console for Debug output
+	AllocConsole();
+
 	// Load the original dinput8.dll from the system directory
 	char DInputDllName[MAX_PATH];
 	GetSystemDirectoryA(DInputDllName, MAX_PATH);
