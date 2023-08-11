@@ -149,6 +149,7 @@
   <ItemGroup>
     <ClInclude Include="CustomHooks.h" />
     <ClInclude Include="DInput8.h" />
+    <ClInclude Include="FileHooks.h" />
     <ClInclude Include="Hook.h" />
     <ClInclude Include="stdafx.h" />
     <ClInclude Include="targetver.h" />
@@ -156,6 +157,7 @@
   <ItemGroup>
     <ClCompile Include="CustomHooks.cpp" />
     <ClCompile Include="DLLMain.cpp" />
+    <ClCompile Include="FileHooks.cpp" />
     <ClCompile Include="Hook.cpp" />
     <ClCompile Include="MinimalDInput8Hook.cpp" />
     <ClCompile Include="stdafx.cpp">

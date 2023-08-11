@@ -110,6 +110,9 @@ void* HookFunction_Internal(const char* DLLName, const char* FunctionName, void*
 		}
 	}
 
+	WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), FunctionName, (DWORD)strlen(FunctionName), nullptr, nullptr);
+	WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), "\n", 1, nullptr, nullptr);
+	//DebugOut(L"Unable to Get %s from %s.\n", FunctionName, DLLName);
 	// DLL and function import not found return nullptr to signal this
 	return nullptr;
 }

@@ -18,9 +18,13 @@ void Init()
 	{
 		OriginalFunction = (DirectInput8Create_t)GetProcAddress(DInput8DLL, "DirectInput8Create");
 	}
+	OutputDebugString(TEXT("Initializing...\n"));
 	InitializeHooking();
 
+	OutputDebugString(TEXT("SetupHooks...\n"));
 	SetupHooks();
+
+	OutputDebugString(TEXT("Init Completed.\n"));
 }
 
 BOOL APIENTRY DllMain(HMODULE Module,
