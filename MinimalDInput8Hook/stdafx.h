@@ -13,6 +13,11 @@
 #include <winternl.h>
 #include <imagehlp.h>
 
+#ifdef _MSC_VER 
+//not #if defined(_WIN32) || defined(_WIN64) because we have strncasecmp in mingw
+#define strncasecmp _strnicmp
+#define strcasecmp _stricmp
+#endif
 
 #ifdef DLL_EXPORT
 #define DINPUT8_API __declspec(dllexport)

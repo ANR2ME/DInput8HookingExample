@@ -33,6 +33,9 @@
     <ClInclude Include="FileHooks.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="SocketHooks.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="stdafx.cpp">
@@ -51,6 +54,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="FileHooks.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="SocketHooks.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

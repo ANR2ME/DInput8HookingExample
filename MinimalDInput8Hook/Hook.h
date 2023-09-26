@@ -1,6 +1,7 @@
 #pragma once
 
 #include "stdafx.h"
+#include <map>
 
 typedef struct _PEB_FREE_BLOCK {
 	_PEB_FREE_BLOCK          *Next;
@@ -70,6 +71,13 @@ struct CUSTOM_PEB
 };
 
 extern PROCESS_BASIC_INFORMATION BasicProcessInfo;
+
+extern HMODULE hModule;
+extern DWORD  dwThreadId;
+extern HANDLE hThread;
+extern DWORD curProcId;
+
+extern std::map<std::string, void*> knownProcs;
 
 int InitializeHooking();
 

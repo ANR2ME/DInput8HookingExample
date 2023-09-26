@@ -6,9 +6,6 @@
 
 void Init()
 {
-	// Create a console for Debug output
-	AllocConsole();
-
 	// Load the original dinput8.dll from the system directory
 	char DInputDllName[MAX_PATH];
 	GetSystemDirectoryA(DInputDllName, MAX_PATH);
@@ -20,11 +17,20 @@ void Init()
 	}
 	OutputDebugString(TEXT("Initializing...\n"));
 	InitializeHooking();
+	OutputDebugString(TEXT("Init Completed.\n"));
+}
 
+DWORD WINAPI ThreadMain(LPVOID lpParam)
+{
+	// Delayed to ensure packed/protected program have fully unpacked & relocate the import table
+	Sleep(50000);
+	
 	OutputDebugString(TEXT("SetupHooks...\n"));
 	SetupHooks();
-
-	OutputDebugString(TEXT("Init Completed.\n"));
+	OutputDebugString(TEXT("SetupHooks Completed.\n"));
+	//MessageBox(NULL, L"Success", L"From new thread", MB_OK);
+	WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), "Thread Finished\n", 16, nullptr, nullptr);
+	return 0;
 }
 
 BOOL APIENTRY DllMain(HMODULE Module,
@@ -34,7 +40,18 @@ BOOL APIENTRY DllMain(HMODULE Module,
 	switch (ReasonForCall)
 	{
 	case DLL_PROCESS_ATTACH:
-		Init();
+		{
+			curProcId = GetCurrentProcessId();
+			hModule = Module;
+			//DisableThreadLibraryCalls(Module);
+			// Create a console for Debug output
+			AllocConsole();
+			// Pre-Init
+			Init(); // Must not be delayed
+			//SetupHooks(); // Can be delayed
+			// Create new thread
+			hThread = CreateThread(NULL, 0, ThreadMain, NULL, 0, &dwThreadId);
+		}
 		break;
 	case DLL_THREAD_ATTACH:
 	case DLL_THREAD_DETACH:

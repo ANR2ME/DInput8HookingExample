@@ -1,6 +1,15 @@
 #include "stdafx.h"
 #include "Hook.h"
 #include <winternl.h>
+#include <atlstr.h>
+#include <algorithm>
+
+HMODULE hModule;
+DWORD  dwThreadId;
+HANDLE hThread;
+DWORD curProcId;;
+
+std::map<std::string, void*> knownProcs;
 
 typedef NTSTATUS(NTAPI* TFNNtQueryInformationProcess)(
 	IN HANDLE ProcessHandle,
@@ -19,6 +28,7 @@ int InitInternals() {
 		MessageBox(GetConsoleWindow(), TEXT("Failed to get NtQueryInformationProcess"), TEXT("Error"), MB_OK);
 		return -1;
 	}
+	// TODO: Get the original VirtualProtect too and use it
 
 	return 0;
 }
@@ -30,7 +40,7 @@ int InitializeHooking()
 	}
 
 	// Get our Process Handle
-	const HANDLE Process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, GetCurrentProcessId());
+	const HANDLE Process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, /*GetCurrentProcessId()*/curProcId);
 
 	// Find out our base address, where the Executable image is loaded in memory
 	//NtQueryInformationProcess(Process, ProcessBasicInformation, &BasicProcessInfo, sizeof(BasicProcessInfo), nullptr);
@@ -69,37 +79,89 @@ void* HookFunction_Internal(const char* DLLName, const char* FunctionName, void*
 		unsigned char* mm = (unsigned char*)Descriptor;
 		if ((*mm == 0) && memcmp(mm, mm + 1, sizeof(IMAGE_IMPORT_DESCRIPTOR) - 1) == 0) 
 			break;
+		//if (Descriptor->Characteristics == 0)
+		//	break;
 
 		//WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), ImportDLLName, (DWORD)strlen(ImportDLLName), nullptr, nullptr);
 		//WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), "\n", 1, nullptr, nullptr);
 
 		// Check if we found our DLL in the import table
-		if (!strcmp(ImportDLLName, DLLName))
+		if (!strcasecmp(ImportDLLName, DLLName))
 		{
+			// Note: Protected game/program might have the Descriptor->OriginalFirstThunk set to 0 resulting to random address in ImportFunctionName (may be try to reconstruct the ILT by opening the same process in suspended state?)
 			PIMAGE_THUNK_DATA ImportNameTable = (PIMAGE_THUNK_DATA)(BaseAddress + Descriptor->OriginalFirstThunk);
 			int Offset = 0;
 			// The import name table is a null terminated array, so iterate until we either found it or reach the null termination
+			// Note: If the MSB is set the function is imported by using Ordinal/Hint instead of Name (the Hint value is the lowest WORD), otherwise it's an RVA to a IMAGE_IMPORT_BY_NAME structure
 			while (ImportNameTable->u1.AddressOfData != 0)
 			{
-				PIMAGE_IMPORT_BY_NAME NameImport = (PIMAGE_IMPORT_BY_NAME)(BaseAddress + ImportNameTable->u1.AddressOfData);
-				// Null terminated function name start pointer is stored in here
-				const char* ImportFunctionName = NameImport->Name;
-				if (!strcmp(FunctionName, ImportFunctionName))
-				{
-					PIMAGE_THUNK_DATA ImportAddressTable = (PIMAGE_THUNK_DATA)(BaseAddress + Descriptor->FirstThunk);
-					// The import address table is in the same order as the import name table
-					ImportAddressTable += Offset;
+				if (!IMAGE_SNAP_BY_ORDINAL(ImportNameTable->u1.Ordinal)) {
+					PIMAGE_IMPORT_BY_NAME NameImport = (PIMAGE_IMPORT_BY_NAME)(BaseAddress + ImportNameTable->u1.AddressOfData);
+					// Null terminated function name start pointer is stored in here
+					const char* ImportFunctionName = NameImport->Name;
 
-					void* OriginalAddress = (void*)ImportAddressTable->u1.AddressOfData;
-					DWORD OldProtection;
-					// Make the page writable to patch the pointer
-					VirtualProtect(ImportAddressTable, sizeof(IMAGE_THUNK_DATA), PAGE_READWRITE, &OldProtection);
-					ImportAddressTable->u1.AddressOfData = (ULONGLONG)NewAddress;
-					// Restore page protection to the previous state
-					VirtualProtect(ImportAddressTable, sizeof(IMAGE_THUNK_DATA), OldProtection, &OldProtection);
-					return OriginalAddress;
+					WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), ImportFunctionName, (DWORD)strlen(ImportFunctionName), nullptr, nullptr);
+					WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), "\n", 1, nullptr, nullptr);
+
+					// Note: Protected program/game might have a random/invalid name here (or already replaced with the function address?), may be we should compare the Hint/Ordinal instead of Name (will need to generate Ordinal2Name mapper from export table)? or compare the address?
+					if (!strcmp(FunctionName, ImportFunctionName))
+					{
+						PIMAGE_THUNK_DATA ImportAddressTable = (PIMAGE_THUNK_DATA)(BaseAddress + Descriptor->FirstThunk);
+						// The import address table is in the same order as the import name table
+						ImportAddressTable += Offset;
+
+						void* OriginalAddress = (void*)ImportAddressTable->u1.AddressOfData;
+						DWORD OldProtection;
+						// Make the page writable to patch the pointer
+						VirtualProtect(ImportAddressTable, sizeof(IMAGE_THUNK_DATA), PAGE_READWRITE, &OldProtection);
+						ImportAddressTable->u1.AddressOfData = (ULONGLONG)NewAddress;
+						// Restore page protection to the previous state
+						VirtualProtect(ImportAddressTable, sizeof(IMAGE_THUNK_DATA), OldProtection, &OldProtection);
+
+						WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), ImportFunctionName, (DWORD)strlen(ImportFunctionName), nullptr, nullptr);
+						WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), ": Success\n", 10, nullptr, nullptr);
+
+						return OriginalAddress;
+					}
+					// Try to compare the address
+					else {						
+						PIMAGE_THUNK_DATA ImportAddressTable = (PIMAGE_THUNK_DATA)(BaseAddress + Descriptor->FirstThunk);
+						// The import address table is in the same order as the import name table
+						ImportAddressTable += Offset;
+
+						void* OriginalAddress = (void*)ImportAddressTable->u1.AddressOfData;
+
+						std::string combinedName = std::string(DLLName);
+						std::transform(combinedName.begin(), combinedName.end(), combinedName.begin(),
+							[](unsigned char c) { return std::tolower(c); });
+						combinedName += ":" + std::string(FunctionName);
+
+						void* knownAddr = nullptr;
+						if (knownProcs.find(combinedName) != knownProcs.end()) {
+							knownAddr = knownProcs[combinedName];
+						}
+						else {
+							knownAddr = GetProcAddress(GetModuleHandle(CA2CT(DLLName)), FunctionName);
+							if (knownAddr)
+								knownProcs[combinedName] = knownAddr;
+						}
+
+						if (knownAddr && (OriginalAddress == knownAddr)) {
+
+							DWORD OldProtection;
+							// Make the page writable to patch the pointer
+							VirtualProtect(ImportAddressTable, sizeof(IMAGE_THUNK_DATA), PAGE_READWRITE, &OldProtection);
+							ImportAddressTable->u1.AddressOfData = (ULONGLONG)NewAddress;
+							// Restore page protection to the previous state
+							VirtualProtect(ImportAddressTable, sizeof(IMAGE_THUNK_DATA), OldProtection, &OldProtection);
+
+							WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), FunctionName, (DWORD)strlen(FunctionName), nullptr, nullptr);
+							WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), ": Success-ByAddr\n", 17, nullptr, nullptr);
+
+							return OriginalAddress;
+						}
+					}
 				}
-
 
 				++ImportNameTable;
 				++Offset;
@@ -111,7 +173,7 @@ void* HookFunction_Internal(const char* DLLName, const char* FunctionName, void*
 	}
 
 	WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), FunctionName, (DWORD)strlen(FunctionName), nullptr, nullptr);
-	WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), "\n", 1, nullptr, nullptr);
+	WriteConsoleA(GetStdHandle(STD_OUTPUT_HANDLE), ": Failed\n", 9, nullptr, nullptr);
 	//DebugOut(L"Unable to Get %s from %s.\n", FunctionName, DLLName);
 	// DLL and function import not found return nullptr to signal this
 	return nullptr;
